@@ -5,7 +5,8 @@ import { CarBrowse } from "@/components/car-browse";
 import { HomeScreen, PlayScreen, ResultScreen, Shell } from "@/components/quiz-ui";
 import { LOCAL_CARS, carYear, fullName, scoreGuess, type CarChallenge } from "@/data/cars";
 import { formatYear } from "@/data/year-utils";
-import { fetchRemoteCars } from "@/data/load-catalog";
+import { hydrateCatalog } from "@/data/load-catalog";
+import { clearSavedCars, rememberPhotos } from "@/data/car-store";
 import {
   END_SCALE,
   MAX_REVEALS,
@@ -38,8 +39,9 @@ export function HeadlightQuiz() {
   const [results, setResults] = useState<RoundResult[]>([]);
   const [started, setStarted] = useState(false);
   const [imageReady, setImageReady] = useState(false);
-  const [loadingPool, setLoadingPool] = useState(false);
+  const [loadingPool, setLoadingPool] = useState(true);
   const [poolError, setPoolError] = useState("");
+  const [catalogStatus, setCatalogStatus] = useState("Kayitli arabalar okunuyor");
   const [fullPool, setFullPool] = useState<CarChallenge[]>(LOCAL_CARS);
   const [poolCount, setPoolCount] = useState(LOCAL_CARS.length);
   const [difficulty, setDifficulty] = useState<Difficulty>("hard");
@@ -57,20 +59,23 @@ export function HeadlightQuiz() {
   }, [car, difficulty, deck, fullPool]);
 
   async function loadPool() {
-    if (fullPool.length > LOCAL_CARS.length) return fullPool;
     setLoadingPool(true);
     setPoolError("");
-    let source = LOCAL_CARS;
     try {
-      const remote = await fetchRemoteCars();
-      if (remote.length > 50) source = [...LOCAL_CARS, ...remote];
+      const source = await hydrateCatalog((cars, status) => {
+        setFullPool(cars);
+        setPoolCount(cars.length);
+        setCatalogStatus(status);
+      });
+      setFullPool(source);
+      setPoolCount(source.length);
+      return source;
     } catch {
-      setPoolError("Uzaktan liste alınamadı, yerel arabalarla devam.");
+      setPoolError("Liste indirilemedi. Bu cihazda kayitli arabalarla devam.");
+      return fullPool;
+    } finally {
+      setLoadingPool(false);
     }
-    setFullPool(source);
-    setPoolCount(source.length);
-    setLoadingPool(false);
-    return source;
   }
 
   useEffect(() => {
@@ -78,9 +83,13 @@ export function HeadlightQuiz() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    rememberPhotos(deck.length ? deck : fullPool, 40);
+  }, [deck, fullPool]);
+
   async function startRound(mode: Difficulty, rangeId = yearRangeId) {
     setDifficulty(mode);
-    const source = await loadPool();
+    const source = fullPool.length > 40 ? fullPool : await loadPool();
     let filtered = source;
     if (mode === "medium") {
       const range = YEAR_RANGES.find((r) => r.id === rangeId) ?? YEAR_RANGES[0]!;
@@ -89,7 +98,7 @@ export function HeadlightQuiz() {
         return y != null && y >= range.min && y <= range.max;
       });
       if (filtered.length < 8) {
-        setPoolError("Bu yıl aralığında yeterli araba yok, tüm yıllar kullanıldı.");
+        setPoolError("Bu yil araliginda yeterli araba yok, tum yillar kullanildi.");
         filtered = source.filter((c) => carYear(c) != null);
       }
     }
@@ -153,7 +162,7 @@ export function HeadlightQuiz() {
     const result = scoreGuess(guess, car);
     if (result === "empty") {
       setTone("warn");
-      setMessage("Bir şey yaz ya da Bilmiyorum de.");
+      setMessage("Bir sey yaz ya da Bilmiyorum de.");
       return;
     }
     if (result === "correct") {
@@ -162,10 +171,10 @@ export function HeadlightQuiz() {
     }
     if (result === "brand-only") {
       setTone("warn");
-      setMessage("Marka doğru. Modeli de yaz, resim büyümesin.");
+      setMessage("Marka dogru. Modeli de yaz, resim buyumesin.");
       return;
     }
-    grow("Yakın değil. Resim bir tık büyüdü.");
+    grow("Yakin degil. Resim bir tik buyudu.");
     setGuess("");
   }
 
@@ -177,7 +186,7 @@ export function HeadlightQuiz() {
       return;
     }
     setMissedNames((prev) => (prev.includes(option) ? prev : [...prev, option]));
-    grow("Yanlış. Resim bir tık büyüdü, başka şık dene.");
+    grow("Yanlis. Resim bir tik buyudu, baska sik dene.");
   }
 
   const total = results.reduce((sum, r) => sum + r.points, 0);
@@ -197,12 +206,20 @@ export function HeadlightQuiz() {
           loadingPool={loadingPool}
           poolCount={poolCount}
           poolError={poolError}
+          catalogStatus={catalogStatus}
           pendingDifficulty={pendingDifficulty}
           yearRangeId={yearRangeId}
           setYearRangeId={setYearRangeId}
           setPendingDifficulty={setPendingDifficulty}
           startRound={startRound}
           setBrowse={setBrowse}
+          onClearSaved={async () => {
+            await clearSavedCars();
+            setFullPool(LOCAL_CARS);
+            setPoolCount(LOCAL_CARS.length);
+            setCatalogStatus("Kayit silindi. Liste yeniden indirilecek.");
+            void loadPool();
+          }}
         />
       </Shell>
     );
