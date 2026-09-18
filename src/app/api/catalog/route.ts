@@ -1,28 +1,24 @@
-import { buildCatalog } from "@/data/build-catalog";
+import { readdir, readFile } from "fs/promises";
+import path from "path";
+import { applyYearEstimates } from "@/data/year-utils";
 import type { CarChallenge } from "@/data/cars";
 
-export const dynamic = "force-dynamic";
-export const maxDuration = 300;
-
-let cache: CarChallenge[] | null = null;
-let inflight: Promise<CarChallenge[]> | null = null;
-let builtVer = 0;
-const CACHE_VER = 4;
+export const dynamic = "force-static";
+export const maxDuration = 60;
 
 export async function GET() {
   try {
-    if (builtVer !== CACHE_VER) {
-      cache = null;
-      inflight = null;
-      builtVer = CACHE_VER;
+    const dir = path.join(process.cwd(), "src/data/catalog");
+    const names = (await readdir(dir)).filter((n) => /^p\d{2}\.json$/.test(n)).sort();
+    const bags: CarChallenge[][] = [];
+    for (const name of names) {
+      const raw = await readFile(path.join(dir, name), "utf8");
+      bags.push(JSON.parse(raw) as CarChallenge[]);
     }
-    if (!cache) {
-      inflight ??= buildCatalog();
-      cache = await inflight;
-    }
-    return Response.json(cache);
+    return Response.json(applyYearEstimates(bags.flat()), {
+      headers: { "cache-control": "public, max-age=3600" },
+    });
   } catch (err) {
-    inflight = null;
     const message = err instanceof Error ? err.message : "catalog failed";
     return Response.json({ error: message }, { status: 502 });
   }

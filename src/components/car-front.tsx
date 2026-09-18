@@ -21,6 +21,7 @@ export function CarFront({
       alt=""
       className="h-full w-full object-cover"
       style={{ objectPosition: `${x}% ${y}%` }}
+      referrerPolicy="no-referrer"
       draggable={false}
       onLoad={onReady}
       onError={onReady}
