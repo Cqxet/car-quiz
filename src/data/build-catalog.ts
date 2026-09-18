@@ -38,7 +38,7 @@ function isSideView(text: string) {
 function brandFrom(manu: string, label: string) {
   const hit = EXTRA_BRANDS.find((b) => label.toLowerCase().includes(b.toLowerCase()));
   if (hit) return hit;
-  let b = (manu || "").trim();
+  const b = (manu || "").trim();
   if (!b || /^Q\d+$/.test(b)) return label.split(/\s+/)[0] || "";
   const low = b.toLowerCase();
   if (low.startsWith("mercedes")) return "Mercedes-Benz";
