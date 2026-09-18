@@ -1,4 +1,4 @@
-import { brandList, fetchCommonsView, fetchWikidataCars } from "@/data/build-catalog";
+import { brandList, fetchCommonsView, fetchWikidataQuick } from "@/data/build-catalog";
 import type { CarChallenge } from "@/data/cars";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +18,7 @@ export async function GET(req: Request) {
   const src = new URL(req.url).searchParams.get("src") || "";
   try {
     let cars: CarChallenge[] = [];
-    if (src === "wd") cars = await fetchWikidataCars();
+    if (src === "wd") cars = await fetchWikidataQuick();
     else if (src === "front") cars = await fetchCommonsView("Front views of automobiles", brandList());
     else if (src === "rear") cars = await fetchCommonsView("Rear views of automobiles", brandList());
     else return Response.json({ error: "src" }, { status: 400 });
