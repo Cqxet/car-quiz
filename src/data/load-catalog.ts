@@ -15,7 +15,7 @@ function merge(base: CarChallenge[], extra: CarChallenge[]) {
   return out;
 }
 
-function expandRow(row: CompactRow): CarChallenge {
+export function expandRow(row: CompactRow): CarChallenge {
   const [id, brand, model, year, file, guess] = row;
   const image = file.startsWith("http")
     ? file
@@ -34,9 +34,15 @@ function expandRow(row: CompactRow): CarChallenge {
 }
 
 async function fetchJson(url: string): Promise<unknown | null> {
-  const res = await fetch(url, { cache: "force-cache" });
+  const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) return null;
   return res.json();
+}
+
+function parseCars(data: unknown): CarChallenge[] {
+  if (!Array.isArray(data) || !data.length) return [];
+  if (Array.isArray(data[0])) return (data as CompactRow[]).map(expandRow);
+  return data as CarChallenge[];
 }
 
 async function fetchPack(): Promise<CarChallenge[]> {
@@ -47,29 +53,49 @@ async function fetchPack(): Promise<CarChallenge[]> {
   const conc = 10;
   for (let i = 0; i < parts.length; i += conc) {
     const slice = parts.slice(i, i + conc);
-    const raw = await Promise.all(
-      slice.map(async (name) => {
-        const data = await fetchJson(`/catalog/pack/${name}`);
-        return Array.isArray(data) ? (data as CompactRow[]).map(expandRow) : [];
-      }),
-    );
-    bags.push(...raw);
+    const raw = await Promise.all(slice.map((name) => fetchJson(`/catalog/pack/${name}`)));
+    bags.push(...raw.map(parseCars));
   }
   return bags.flat();
 }
 
+async function fetchLive(src: string, onTick: (n: number) => void) {
+  const data = await fetchJson(`/api/catalog/live?src=${src}`);
+  const cars = parseCars(data);
+  onTick(cars.length);
+  return cars;
+}
+
 export async function hydrateCatalog(onUpdate: (cars: CarChallenge[], status: string) => void) {
   onUpdate(LOCAL_CARS, "Araba listesi indiriliyor…");
-  let remote: CarChallenge[] = [];
+  let pool = merge([], LOCAL_CARS);
+
   try {
-    remote = await fetchPack();
+    const packed = await fetchPack();
+    if (packed.length) {
+      pool = applyYearEstimates(merge(pool, packed));
+      onUpdate(pool, `${pool.length.toLocaleString("tr-TR")} araba hazır, Wikimedia büyütülüyor…`);
+    }
   } catch {
-    remote = [];
+    /* canlıya geç */
   }
-  const pool = applyYearEstimates(merge(LOCAL_CARS, remote));
+
+  const add = async (src: string, label: string) => {
+    try {
+      const extra = await fetchLive(src, () => {});
+      if (!extra.length) return;
+      pool = applyYearEstimates(merge(pool, extra));
+      onUpdate(pool, `${pool.length.toLocaleString("tr-TR")} araba · ${label}`);
+    } catch {
+      /* kaynak düşerse diğerleri */
+    }
+  };
+
+  await add("wd", "Wikidata");
+  await add("front", "ön fotoğraflar");
+  await add("rear", "arka fotoğraflar");
+
   onUpdate(pool, `${pool.length.toLocaleString("tr-TR")} araba yüklü`);
-  if (remote.length < 500) {
-    throw new Error("catalog incomplete");
-  }
+  if (pool.length <= LOCAL_CARS.length) throw new Error("catalog incomplete");
   return pool;
 }
