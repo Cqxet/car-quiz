@@ -42,41 +42,46 @@ export function HomeScreen({
   loadingPool,
   poolCount,
   poolError,
+  catalogStatus,
   pendingDifficulty,
   yearRangeId,
   setYearRangeId,
   setPendingDifficulty,
   startRound,
   setBrowse,
+  onClearSaved,
 }: {
   loadingPool: boolean;
   poolCount: number;
   poolError: string;
+  catalogStatus: string;
   pendingDifficulty: Difficulty | null;
   yearRangeId: string;
   setYearRangeId: (id: string) => void;
   setPendingDifficulty: (v: Difficulty | null) => void;
   startRound: (mode: Difficulty, rangeId?: string) => void;
   setBrowse: (v: boolean) => void;
+  onClearSaved: () => void;
 }) {
   return (
     <div className="mx-auto max-w-lg space-y-6 px-4 py-10">
       <div className="text-center">
         <p className="text-xs font-medium tracking-[0.2em] text-amber-300/80 uppercase">Araba testi</p>
         <h1 className="font-heading mt-2 text-4xl text-balance text-white sm:text-5xl">
-          Küçük kareden arabayı bilecek misin?
+          Kucuk kareden arabayi bilecek misin?
         </h1>
         <p className="mt-3 text-pretty text-zinc-400">
-          Her soruda far, ızgara, teker veya tampon gibi rastgele bir yerden başlar. Ön ve arka fotoğraflar var; yan görünüm yok. Bilemeyince kare büyür.
+          Site acilinca liste arka planda iner ve bu cihazda kalir. Silmezsen silinmez.
         </p>
         <p className="mt-2 text-sm text-amber-200/80">
-          {loadingPool ? "Araba havuzu yükleniyor (ön + arka)…" : `${poolCount.toLocaleString("tr-TR")} araba hazır`}
+          {catalogStatus}
+          {poolCount ? ` · ${poolCount.toLocaleString("tr-TR")}` : ""}
         </p>
       </div>
       {poolError ? <p className="text-center text-sm text-amber-300">{poolError}</p> : null}
       {pendingDifficulty === "medium" ? (
         <div className="space-y-4 rounded-2xl border border-white/10 bg-white/5 p-4">
-          <p className="text-sm font-medium text-white">Orta: hangi yılların arabaları çıksın?</p>
+          <p className="text-sm font-medium text-white">Orta: hangi yillarin arabalari ciksin?</p>
           <div className="grid grid-cols-2 gap-2">
             {YEAR_RANGES.map((range) => (
               <Button
@@ -94,17 +99,20 @@ export function HomeScreen({
             <Button className="flex-1" variant="secondary" onClick={() => setPendingDifficulty(null)}>
               Geri
             </Button>
-            <Button className="flex-1" disabled={loadingPool} onClick={() => startRound("medium", yearRangeId)}>
-              {loadingPool ? "Yükleniyor…" : "Orta başlat"}
+            <Button className="flex-1" onClick={() => startRound("medium", yearRangeId)}>
+              Orta baslat
             </Button>
           </div>
         </div>
       ) : (
         <div className="grid gap-3">
-          <ModeCard title="Kolay" text="Dört seçenekten marka ve modeli seç." disabled={loadingPool} onClick={() => startRound("easy")} />
-          <ModeCard title="Orta" text="Yıl aralığını seç, o dönemden arabaların marka ve modelini bul." disabled={loadingPool} onClick={() => setPendingDifficulty("medium")} />
-          <ModeCard title="Zor" text="Seçenek yok. Marka ve modeli kendin yaz." disabled={loadingPool} onClick={() => startRound("hard")} />
-          <ModeCard title="İnceleme" text="Arabaları yıl, marka, ön/arka ve arama ile süz, tam fotoğrafa bak." onClick={() => setBrowse(true)} />
+          <ModeCard title="Kolay" text="Dort secenekten marka ve modeli sec." onClick={() => startRound("easy")} />
+          <ModeCard title="Orta" text="Yil araligini sec, o donemden arabalarin marka ve modelini bul." onClick={() => setPendingDifficulty("medium")} />
+          <ModeCard title="Zor" text="Secenek yok. Marka ve modeli kendin yaz." onClick={() => startRound("hard")} />
+          <ModeCard title="Inceleme" text="Arabalari yil, marka, on/arka ve arama ile suz." onClick={() => setBrowse(true)} />
+          <button type="button" onClick={onClearSaved} className="text-center text-xs text-zinc-500 underline-offset-2 hover:text-zinc-300 hover:underline">
+            Bu cihazdaki kayitli arabalari sil
+          </button>
         </div>
       )}
     </div>
@@ -139,7 +147,7 @@ export function ResultScreen({
         ))}
       </ul>
       <Button className="w-full" size="lg" onClick={onHome}>
-        Mod seçimine dön
+        Mod secimine don
       </Button>
     </div>
   );
