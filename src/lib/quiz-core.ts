@@ -1,9 +1,11 @@
-import { fullName, type CarChallenge } from "@/data/cars";
+import { carYear, fullName, type CarChallenge } from "@/data/cars";
+import { hashSeed, mulberry32, shuffleWith } from "@/lib/rng";
 
 export const MAX_REVEALS = 6;
 export const START_SCALE = 3.6;
 export const END_SCALE = 1;
 export const ROUND_SIZE = 20;
+export const DAILY_SIZE = 5;
 
 export type Difficulty = "easy" | "medium" | "hard";
 
@@ -38,8 +40,8 @@ export const ZOOM_SPOTS: { x: number; y: number }[] = [
   { x: 48, y: 18 },
 ];
 
-export function pickSpot() {
-  return ZOOM_SPOTS[Math.floor(Math.random() * ZOOM_SPOTS.length)]!;
+export function pickSpot(rng: () => number = Math.random) {
+  return ZOOM_SPOTS[Math.floor(rng() * ZOOM_SPOTS.length)]!;
 }
 
 export function promptFor(mode: Difficulty) {
@@ -47,22 +49,54 @@ export function promptFor(mode: Difficulty) {
 }
 
 export function shuffle<T>(items: T[]) {
-  const copy = [...items];
-  for (let i = copy.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
+  return shuffleWith(items, Math.random);
 }
 
-export function nameChoices(car: CarChallenge, pool: CarChallenge[]) {
+export function rngFromSeed(seed: string) {
+  return mulberry32(hashSeed(seed));
+}
+
+function similarity(car: CarChallenge, other: CarChallenge) {
+  let score = 0;
+  if (other.brand === car.brand) score += 40;
+  const y1 = carYear(car);
+  const y2 = carYear(other);
+  if (y1 != null && y2 != null) score += Math.max(0, 20 - Math.abs(y1 - y2));
+  const a = car.model.toLowerCase();
+  const b = other.model.toLowerCase();
+  if (a[0] && a[0] === b[0]) score += 6;
+  if (/\d/.test(a) && a.replace(/\D/g, "") === b.replace(/\D/g, "") && a.replace(/\D/g, "")) score += 12;
+  return score;
+}
+
+export function nameChoices(car: CarChallenge, pool: CarChallenge[], rng: () => number = Math.random) {
   const correct = fullName(car);
-  const others = shuffle(pool.filter((c) => fullName(c) !== correct))
-    .slice(0, 3)
-    .map(fullName);
-  return shuffle([correct, ...others]);
+  const unique = new Map<string, CarChallenge>();
+  for (const c of pool) {
+    const n = fullName(c);
+    if (n === correct || unique.has(n)) continue;
+    unique.set(n, c);
+  }
+  const ranked = [...unique.values()].sort((a, b) => similarity(car, b) - similarity(car, a));
+  const close = ranked.slice(0, Math.min(12, ranked.length));
+  const picked = shuffleWith(close, rng).slice(0, 3).map(fullName);
+  while (picked.length < 3 && ranked.length) {
+    const next = ranked[picked.length]!;
+    const n = fullName(next);
+    if (!picked.includes(n)) picked.push(n);
+    else break;
+  }
+  return shuffleWith([correct, ...picked.slice(0, 3)], rng);
 }
 
 export function pointsFor(used: number, solved: boolean) {
   return solved ? Math.max(10, 100 - used * 15) : 0;
+}
+
+export function displayImage(src: string) {
+  if (!src || src.startsWith("/")) return src;
+  if (src.includes("wikimedia.org") || src.includes("wikipedia.org")) {
+    return `/api/image?u=${encodeURIComponent(src)}`;
+  }
+  return src;
 }

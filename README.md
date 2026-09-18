@@ -1,16 +1,29 @@
 # Araba Testi
 
-Araba tahmin oyunu. Wikimedia on/arka fotograflari. Vercel GitHub `Cqxet/car-quiz` reposunu yayinlar.
+Küçük kareden marka ve model tahmin oyunu. Ön ve arka fotoğraflar; yan görünüm yok. Bilemeyince kare büyür.
 
-## Vercel
+Liste tarayıcıya yazılmaz. Her açılışta katalog sunucudan gelir.
 
-`npm run build` = `next build` (webpack). `next.config.ts` icinde `eslint.ignoreDuringBuilds: true` — ESLint `prefer-const` gibi nits yuzunden production dusmez.
+## Oynanış
 
-GitHub `main` guncellenince Vercel yeniden deploy eder. Dashboardda kirmizi build varsa **Redeploy**.
+- **Günün arabaları:** Bugünün tarihine kilitli 5 soru. Aynı gün herkese aynı tur.
+- **Kolay:** Yıl aralığı seç, dört şık.
+- **Orta:** Tüm yıllar, dört şık. Şıklar aynı marka / yakın yıllardan seçilir.
+- **Zor:** Marka ve modeli yaz.
+- **İnceleme:** Filtreleyip tam fotoğrafa bak.
+- Kırık fotoğraf atlanır. Wikimedia görselleri uygulama üzerinden proxy edilir.
+- Tur bitince **aynı turu paylaş** linki (`?seed=`).
+- **Bunu bir daha gösterme** yalnızca bu oturumda gizler.
 
-## Lokal
+## Çalıştırma
+
+Node 20+:
 
 ```bash
 npm install
 npm run dev
 ```
+
+## Vercel
+
+GitHub `main` deploy. Framework Next.js.

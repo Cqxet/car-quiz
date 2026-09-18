@@ -1,7 +1,6 @@
 import { applyYearEstimates } from "@/data/year-utils";
 import type { CarChallenge } from "@/data/cars";
 import { LOCAL_CARS } from "@/data/cars";
-import { readSavedCars, saveCars } from "@/data/car-store";
 
 export const CATALOG_PARTS = 24;
 
@@ -17,7 +16,7 @@ function merge(base: CarChallenge[], extra: CarChallenge[]) {
 }
 
 async function fetchJson(url: string): Promise<unknown> {
-  const res = await fetch(url, { cache: "no-store" });
+  const res = await fetch(url, { cache: "force-cache" });
   if (!res.ok) throw new Error(url);
   return res.json();
 }
@@ -29,7 +28,7 @@ async function fetchPart(id: string): Promise<CarChallenge[]> {
       const data = await fetchJson(url);
       if (Array.isArray(data) && data.length) return data as CarChallenge[];
     } catch {
-      /* next */
+      /* dene diğer adres */
     }
   }
   return [];
@@ -66,28 +65,16 @@ async function fetchPartsParallel(
   return all;
 }
 
-export async function fetchRemoteCars(): Promise<CarChallenge[]> {
-  const ids = await listPartIds();
-  const cars = await fetchPartsParallel(ids, () => {});
-  return applyYearEstimates(cars);
-}
-
 export async function hydrateCatalog(onUpdate: (cars: CarChallenge[], status: string) => void) {
   let pool = merge([], LOCAL_CARS);
-  const saved = await readSavedCars();
-  if (saved.length) {
-    pool = merge(pool, saved);
-    onUpdate(pool, `${pool.length.toLocaleString("tr-TR")} araba kayitli, liste tamamlanıyor`);
-  } else {
-    onUpdate(pool, "Araba listesi indiriliyor");
-  }
+  onUpdate(pool, "Araba listesi indiriliyor…");
 
   let remote: CarChallenge[] = [];
   try {
     const data = await fetchJson("/catalog/all.json");
     if (Array.isArray(data) && data.length > 100) remote = data as CarChallenge[];
   } catch {
-    /* parts */
+    /* paket paket */
   }
 
   if (!remote.length) {
@@ -100,11 +87,9 @@ export async function hydrateCatalog(onUpdate: (cars: CarChallenge[], status: st
 
   if (remote.length) {
     pool = applyYearEstimates(merge(pool, remote));
-    onUpdate(pool, `${pool.length.toLocaleString("tr-TR")} araba kaydediliyor`);
-    await saveCars(pool);
   }
 
-  onUpdate(pool, `${pool.length.toLocaleString("tr-TR")} araba bu cihazda kayitli`);
+  onUpdate(pool, `${pool.length.toLocaleString("tr-TR")} araba yüklü`);
   if (!remote.length && pool.length <= LOCAL_CARS.length) {
     throw new Error("catalog fetch failed");
   }
