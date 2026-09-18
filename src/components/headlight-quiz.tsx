@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { CarBrowse } from "@/components/car-browse";
-import { HomeScreen, PlayScreen, ResultScreen, Shell } from "@/components/quiz-ui";
+import { HomeScreen, ResultScreen, Shell } from "@/components/quiz-ui";
+import { PlayScreen } from "@/components/quiz-ui";
 import { LOCAL_CARS, carYear, fullName, scoreGuess, type CarChallenge } from "@/data/cars";
 import { formatYear } from "@/data/year-utils";
 import { hydrateCatalog } from "@/data/load-catalog";
-import { clearSavedCars, rememberPhotos } from "@/data/car-store";
 import {
+  DAILY_SIZE,
   END_SCALE,
   MAX_REVEALS,
   ROUND_SIZE,
@@ -17,9 +19,10 @@ import {
   pickSpot,
   pointsFor,
   promptFor,
-  shuffle,
+  rngFromSeed,
   type Difficulty,
 } from "@/lib/quiz-core";
+import { randomSeed, shuffleWith, todayKey } from "@/lib/rng";
 
 type RoundResult = {
   car: CarChallenge;
@@ -28,7 +31,13 @@ type RoundResult = {
   solved: boolean;
 };
 
-export function HeadlightQuiz() {
+function parseMode(raw: string | null): Difficulty {
+  if (raw === "easy" || raw === "medium" || raw === "hard") return raw;
+  return "medium";
+}
+
+function HeadlightQuizInner() {
+  const search = useSearchParams();
   const [deck, setDeck] = useState<CarChallenge[]>([]);
   const [index, setIndex] = useState(0);
   const [reveals, setReveals] = useState(0);
@@ -41,7 +50,7 @@ export function HeadlightQuiz() {
   const [imageReady, setImageReady] = useState(false);
   const [loadingPool, setLoadingPool] = useState(true);
   const [poolError, setPoolError] = useState("");
-  const [catalogStatus, setCatalogStatus] = useState("Kayitli arabalar okunuyor");
+  const [catalogStatus, setCatalogStatus] = useState("Araba listesi indiriliyor…");
   const [fullPool, setFullPool] = useState<CarChallenge[]>(LOCAL_CARS);
   const [poolCount, setPoolCount] = useState(LOCAL_CARS.length);
   const [difficulty, setDifficulty] = useState<Difficulty>("hard");
@@ -50,13 +59,27 @@ export function HeadlightQuiz() {
   const [browse, setBrowse] = useState(false);
   const [missedNames, setMissedNames] = useState<string[]>([]);
   const [crop, setCrop] = useState({ x: 50, y: 42 });
+  const [roundSeed, setRoundSeed] = useState("");
+  const [daily, setDaily] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
+  const [sessionStats, setSessionStats] = useState({ played: 0, solved: 0, points: 0 });
+  const rngRef = useRef(() => Math.random());
+  const skipRef = useRef(0);
 
   const car = index < deck.length ? deck[index] : undefined;
   const scale = resolved ? END_SCALE : START_SCALE - ((START_SCALE - END_SCALE) / MAX_REVEALS) * reveals;
-  const nameOptions = useMemo(() => {
-    if (!car || (difficulty !== "easy" && difficulty !== "medium")) return [];
-    return nameChoices(car, difficulty === "medium" ? deck : fullPool);
-  }, [car, difficulty, deck, fullPool]);
+  const [nameOptions, setNameOptions] = useState<string[]>([]);
+
+  const shareUrl = useMemo(() => {
+    if (typeof window === "undefined" || !roundSeed) return "";
+    const u = new URL(window.location.origin + window.location.pathname);
+    u.searchParams.set("seed", roundSeed);
+    u.searchParams.set("mode", difficulty);
+    if (difficulty === "easy") u.searchParams.set("years", yearRangeId);
+    if (daily) u.searchParams.set("daily", "1");
+    return u.toString();
+  }, [roundSeed, difficulty, yearRangeId, daily]);
 
   async function loadPool() {
     setLoadingPool(true);
@@ -71,7 +94,7 @@ export function HeadlightQuiz() {
       setPoolCount(source.length);
       return source;
     } catch {
-      setPoolError("Liste indirilemedi. Bu cihazda kayitli arabalarla devam.");
+      setPoolError("Liste indirilemedi. Küçük yerel listeyle devam.");
       return fullPool;
     } finally {
       setLoadingPool(false);
@@ -83,27 +106,20 @@ export function HeadlightQuiz() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    rememberPhotos(deck.length ? deck : fullPool, 40);
-  }, [deck, fullPool]);
+  function visiblePool(source: CarChallenge[]) {
+    return source.filter((c) => !hiddenIds.has(c.id));
+  }
 
-  async function startRound(mode: Difficulty, rangeId = yearRangeId) {
+  function beginDeck(mode: Difficulty, cars: CarChallenge[], seed: string, isDaily: boolean, rangeId: string) {
+    rngRef.current = rngFromSeed(seed);
+    const size = Math.min(isDaily ? DAILY_SIZE : ROUND_SIZE, Math.max(1, cars.length));
+    const ordered = shuffleWith(cars, rngRef.current).slice(0, size);
+    skipRef.current = 0;
+    setRoundSeed(seed);
+    setDaily(isDaily);
     setDifficulty(mode);
-    const source = fullPool.length > 40 ? fullPool : await loadPool();
-    let filtered = source;
-    if (mode === "medium") {
-      const range = YEAR_RANGES.find((r) => r.id === rangeId) ?? YEAR_RANGES[0]!;
-      filtered = source.filter((c) => {
-        const y = carYear(c);
-        return y != null && y >= range.min && y <= range.max;
-      });
-      if (filtered.length < 8) {
-        setPoolError("Bu yil araliginda yeterli araba yok, tum yillar kullanildi.");
-        filtered = source.filter((c) => carYear(c) != null);
-      }
-    }
-    const size = Math.min(ROUND_SIZE, Math.max(1, filtered.length));
-    setDeck(shuffle(filtered).slice(0, size));
+    setYearRangeId(rangeId);
+    setDeck(ordered);
     setIndex(0);
     setReveals(0);
     setGuess("");
@@ -112,14 +128,49 @@ export function HeadlightQuiz() {
     setTone("idle");
     setImageReady(false);
     setMissedNames([]);
-    setCrop(pickSpot());
+    setCrop(pickSpot(rngRef.current));
     setStarted(true);
     setPendingDifficulty(null);
+    setCopied(false);
     setMessage(promptFor(mode));
   }
 
+  async function startRound(mode: Difficulty, rangeId = yearRangeId, opts?: { seed?: string; daily?: boolean }) {
+    const source = fullPool.length > 40 ? fullPool : await loadPool();
+    let filtered = visiblePool(source);
+    if (mode === "easy" && !opts?.daily) {
+      const range = YEAR_RANGES.find((r) => r.id === rangeId) ?? YEAR_RANGES[0]!;
+      filtered = filtered.filter((c) => {
+        const y = carYear(c);
+        return y != null && y >= range.min && y <= range.max;
+      });
+      if (filtered.length < 8) {
+        setPoolError("Bu yıl aralığında yeterli araba yok, tüm yıllar kullanıldı.");
+        filtered = visiblePool(source).filter((c) => carYear(c) != null);
+      }
+    }
+    const seed = opts?.seed ?? (opts?.daily ? `daily-${todayKey()}` : randomSeed());
+    beginDeck(mode, filtered, seed, Boolean(opts?.daily), rangeId);
+  }
+
+  useEffect(() => {
+    const seed = search.get("seed");
+    if (!seed || loadingPool || started) return;
+    const mode = parseMode(search.get("mode"));
+    const years = search.get("years") || "all";
+    const isDaily = search.get("daily") === "1" || seed.startsWith("daily-");
+    void startRound(mode, years, { seed, daily: isDaily });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadingPool, search]);
+
   useEffect(() => {
     setImageReady(false);
+    if (car && difficulty !== "hard") {
+      setNameOptions(nameChoices(car, difficulty === "easy" ? deck : fullPool, rngRef.current));
+    } else {
+      setNameOptions([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [car?.id]);
 
   function goNext() {
@@ -130,13 +181,33 @@ export function HeadlightQuiz() {
     setTone("idle");
     setImageReady(false);
     setMissedNames([]);
-    setCrop(pickSpot());
+    setCrop(pickSpot(rngRef.current));
     setMessage(promptFor(difficulty));
+  }
+
+  function skipBroken() {
+    skipRef.current += 1;
+    if (skipRef.current > 12) {
+      setTone("warn");
+      setMessage("Birkaç fotoğraf açılamadı, sonraki soruya geç.");
+      goNext();
+      return;
+    }
+    setDeck((prev) => prev.filter((_, i) => i !== index));
+    setReveals(0);
+    setGuess("");
+    setResolved(false);
+    setTone("idle");
+    setImageReady(false);
+    setMissedNames([]);
+    setCrop(pickSpot(rngRef.current));
+    setMessage("Kırık fotoğraf atlandı.");
   }
 
   function finishRound(solved: boolean) {
     if (!car || resolved) return;
     const used = solved ? reveals : MAX_REVEALS;
+    const pts = pointsFor(used, solved);
     setResolved(true);
     setReveals(MAX_REVEALS);
     setTone(solved ? "ok" : "bad");
@@ -144,7 +215,12 @@ export function HeadlightQuiz() {
     const yearLabel = formatYear(car);
     const label = yearLabel ? `${name} · ${yearLabel}` : name;
     setMessage(solved ? `Bildin: ${label}` : `Cevap: ${label}`);
-    setResults((prev) => [...prev, { car, reveals: used, points: pointsFor(used, solved), solved }]);
+    setResults((prev) => [...prev, { car, reveals: used, points: pts, solved }]);
+    setSessionStats((s) => ({
+      played: s.played + 1,
+      solved: s.solved + (solved ? 1 : 0),
+      points: s.points + pts,
+    }));
   }
 
   function grow(reason: string) {
@@ -162,7 +238,7 @@ export function HeadlightQuiz() {
     const result = scoreGuess(guess, car);
     if (result === "empty") {
       setTone("warn");
-      setMessage("Bir sey yaz ya da Bilmiyorum de.");
+      setMessage("Bir şey yaz ya da Bilmiyorum de.");
       return;
     }
     if (result === "correct") {
@@ -171,10 +247,10 @@ export function HeadlightQuiz() {
     }
     if (result === "brand-only") {
       setTone("warn");
-      setMessage("Marka dogru. Modeli de yaz, resim buyumesin.");
+      setMessage("Marka doğru. Modeli de yaz, resim büyümesin.");
       return;
     }
-    grow("Yakin degil. Resim bir tik buyudu.");
+    grow("Yakın değil. Resim bir tık büyüdü.");
     setGuess("");
   }
 
@@ -186,7 +262,23 @@ export function HeadlightQuiz() {
       return;
     }
     setMissedNames((prev) => (prev.includes(option) ? prev : [...prev, option]));
-    grow("Yanlis. Resim bir tik buyudu, baska sik dene.");
+    grow("Yanlış. Resim bir tık büyüdü, başka şık dene.");
+  }
+
+  function hideCar() {
+    if (!car) return;
+    setHiddenIds((prev) => new Set(prev).add(car.id));
+    goNext();
+  }
+
+  async function copyShare() {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
   }
 
   const total = results.reduce((sum, r) => sum + r.points, 0);
@@ -212,14 +304,9 @@ export function HeadlightQuiz() {
           setYearRangeId={setYearRangeId}
           setPendingDifficulty={setPendingDifficulty}
           startRound={startRound}
+          startDaily={() => void startRound("medium", "all", { daily: true, seed: `daily-${todayKey()}` })}
           setBrowse={setBrowse}
-          onClearSaved={async () => {
-            await clearSavedCars();
-            setFullPool(LOCAL_CARS);
-            setPoolCount(LOCAL_CARS.length);
-            setCatalogStatus("Kayit silindi. Liste yeniden indirilecek.");
-            void loadPool();
-          }}
+          sessionStats={sessionStats}
         />
       </Shell>
     );
@@ -231,9 +318,13 @@ export function HeadlightQuiz() {
         <ResultScreen
           results={results}
           total={total}
+          shareUrl={shareUrl}
+          copied={copied}
+          onShare={() => void copyShare()}
           onHome={() => {
             setStarted(false);
             setPendingDifficulty(null);
+            setDaily(false);
           }}
         />
       </Shell>
@@ -248,6 +339,7 @@ export function HeadlightQuiz() {
         scale={scale}
         difficulty={difficulty}
         yearRangeId={yearRangeId}
+        daily={daily}
         index={index}
         deckLen={deck.length}
         total={total}
@@ -261,11 +353,27 @@ export function HeadlightQuiz() {
         guess={guess}
         setGuess={setGuess}
         onReady={() => setImageReady(true)}
+        onFail={skipBroken}
         pickName={pickName}
         goNext={goNext}
         submitText={submitText}
         grow={grow}
+        hideCar={hideCar}
       />
     </Shell>
+  );
+}
+
+export function HeadlightQuiz() {
+  return (
+    <Suspense
+      fallback={
+        <Shell>
+          <p className="px-4 py-16 text-center text-zinc-400">Yükleniyor…</p>
+        </Shell>
+      }
+    >
+      <HeadlightQuizInner />
+    </Suspense>
   );
 }
