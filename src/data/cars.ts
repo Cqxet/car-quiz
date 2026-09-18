@@ -1,28 +1,3 @@
-import c00 from "./catalog/p00.json";
-import c01 from "./catalog/p01.json";
-import c02 from "./catalog/p02.json";
-import c03 from "./catalog/p03.json";
-import c04 from "./catalog/p04.json";
-import c05 from "./catalog/p05.json";
-import c06 from "./catalog/p06.json";
-import c07 from "./catalog/p07.json";
-import c08 from "./catalog/p08.json";
-import c09 from "./catalog/p09.json";
-import c10 from "./catalog/p10.json";
-import c11 from "./catalog/p11.json";
-import c12 from "./catalog/p12.json";
-import c13 from "./catalog/p13.json";
-import c14 from "./catalog/p14.json";
-import c15 from "./catalog/p15.json";
-import c16 from "./catalog/p16.json";
-import c17 from "./catalog/p17.json";
-import c18 from "./catalog/p18.json";
-import c19 from "./catalog/p19.json";
-import c20 from "./catalog/p20.json";
-import c21 from "./catalog/p21.json";
-import c22 from "./catalog/p22.json";
-import c23 from "./catalog/p23.json";
-
 export type CarChallenge = {
   id: string;
   brand: string;
@@ -379,30 +354,4 @@ export function fullName(car: CarChallenge) {
 
 export const LOCAL_CARS = CARS;
 
-export const CAR_POOL: CarChallenge[] = [
-  ...LOCAL_CARS,
-  ...(c00 as CarChallenge[]),
-  ...(c01 as CarChallenge[]),
-  ...(c02 as CarChallenge[]),
-  ...(c03 as CarChallenge[]),
-  ...(c04 as CarChallenge[]),
-  ...(c05 as CarChallenge[]),
-  ...(c06 as CarChallenge[]),
-  ...(c07 as CarChallenge[]),
-  ...(c08 as CarChallenge[]),
-  ...(c09 as CarChallenge[]),
-  ...(c10 as CarChallenge[]),
-  ...(c11 as CarChallenge[]),
-  ...(c12 as CarChallenge[]),
-  ...(c13 as CarChallenge[]),
-  ...(c14 as CarChallenge[]),
-  ...(c15 as CarChallenge[]),
-  ...(c16 as CarChallenge[]),
-  ...(c17 as CarChallenge[]),
-  ...(c18 as CarChallenge[]),
-  ...(c19 as CarChallenge[]),
-  ...(c20 as CarChallenge[]),
-  ...(c21 as CarChallenge[]),
-  ...(c22 as CarChallenge[]),
-  ...(c23 as CarChallenge[]),
-];
+export const CAR_POOL: CarChallenge[] = [...LOCAL_CARS];
