@@ -4,11 +4,15 @@ import type { CarChallenge } from "@/data/cars";
 
 export function CarFront({
   car,
+  crop,
   onReady,
 }: {
   car: CarChallenge;
+  crop?: { x: number; y: number };
   onReady?: () => void;
 }) {
+  const x = crop?.x ?? car.focusX;
+  const y = crop?.y ?? car.focusY;
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
@@ -16,7 +20,7 @@ export function CarFront({
       src={car.image}
       alt=""
       className="h-full w-full object-cover"
-      style={{ objectPosition: `${car.focusX}% ${car.focusY}%` }}
+      style={{ objectPosition: `${x}% ${y}%` }}
       draggable={false}
       onLoad={onReady}
       onError={onReady}

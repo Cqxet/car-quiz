@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Far Testi",
-  description: "Far şekline bakıp araba marka ve modelini yaz. Bilemeyince resim büyür.",
+  title: "Araba Testi",
+  description: "Arabanın rastgele bir yerinden bakıp marka ve modeli bul. Bilemeyince resim büyür.",
 };
 
 export default function RootLayout({
