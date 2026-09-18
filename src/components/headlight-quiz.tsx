@@ -4,7 +4,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CarFront } from "@/components/car-front";
-import { CAR_POOL, fullName, scoreGuess, type CarChallenge } from "@/data/cars";
+import { LOCAL_CARS, fullName, scoreGuess, type CarChallenge } from "@/data/cars";
+import { fetchRemoteCars } from "@/data/load-catalog";
 
 const MAX_REVEALS = 6;
 const START_SCALE = 3.6;
@@ -38,14 +39,25 @@ export function HeadlightQuiz() {
   const [results, setResults] = useState<RoundResult[]>([]);
   const [started, setStarted] = useState(false);
   const [imageReady, setImageReady] = useState(false);
+  const [loadingPool, setLoadingPool] = useState(false);
+  const [poolError, setPoolError] = useState("");
 
   const car = index < deck.length ? deck[index] : undefined;
   const scale = START_SCALE - ((START_SCALE - END_SCALE) / MAX_REVEALS) * reveals;
   const pointsFor = (used: number, solved: boolean) =>
     solved ? Math.max(10, 100 - used * 15) : 0;
 
-  function startRound() {
-    setDeck(shuffle(CAR_POOL).slice(0, ROUND_SIZE));
+  async function startRound() {
+    setLoadingPool(true);
+    setPoolError("");
+    let source = LOCAL_CARS;
+    try {
+      const remote = await fetchRemoteCars();
+      if (remote.length > 50) source = [...LOCAL_CARS, ...remote];
+    } catch {
+      setPoolError("Uzaktan liste alınamadı, yerel arabalarla devam.");
+    }
+    setDeck(shuffle(source).slice(0, ROUND_SIZE));
     setIndex(0);
     setReveals(0);
     setGuess("");
@@ -55,6 +67,7 @@ export function HeadlightQuiz() {
     setMessage("Far şekline bak, marka ve modeli yaz.");
     setImageReady(false);
     setStarted(true);
+    setLoadingPool(false);
   }
 
   useEffect(() => {
@@ -131,11 +144,12 @@ export function HeadlightQuiz() {
           </h1>
           <p className="text-pretty text-zinc-400">
             Seçenek yok. Marka ve modeli kendin yaz. Bilemeyince ya da yanlış yazınca
-            kare bir tık büyür, arabanın daha çoğu görünür. Havuzda {CAR_POOL.length.toLocaleString("tr-TR")} araba
-            var; her turda rastgele {ROUND_SIZE} tanesi gelir.
+            kare bir tık büyür, arabanın daha çoğu görünür. Havuzda binlerce araba var;
+            her turda rastgele {ROUND_SIZE} tanesi gelir.
           </p>
-          <Button size="lg" className="h-11 px-6 text-base" onClick={startRound}>
-            Testi başlat
+          {poolError ? <p className="text-sm text-amber-300">{poolError}</p> : null}
+          <Button size="lg" className="h-11 px-6 text-base" onClick={startRound} disabled={loadingPool}>
+            {loadingPool ? "Arabalar yükleniyor…" : "Testi başlat"}
           </Button>
         </div>
       </Shell>
