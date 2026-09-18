@@ -316,12 +316,24 @@ export const CARS: CarChallenge[] = [
 
 function fold(value: string) {
   return value
-    .toLocaleLowerCase("tr")
+    .replace(/İ/g, "i")
+    .replace(/I/g, "i")
+    .toLocaleLowerCase("en-US")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/ı/g, "i")
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
+}
+
+export function carYear(car: CarChallenge): number | null {
+  const direct = Number.parseInt(car.year, 10);
+  if (direct >= 1886 && direct <= 2026) return direct;
+  const blob = `${car.year} ${car.model} ${car.image}`;
+  const match = blob.match(/\b((?:19|20)\d{2})\b/);
+  if (!match) return null;
+  const y = Number.parseInt(match[1], 10);
+  return y >= 1886 && y <= 2026 ? y : null;
 }
 
 export function scoreGuess(guess: string, car: CarChallenge) {
