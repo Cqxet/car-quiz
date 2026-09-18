@@ -1,7 +1,7 @@
 import type { CarChallenge } from "@/data/cars";
 
 const DB_NAME = "araba-testi";
-const DB_VER = 1;
+const DB_VER = 2;
 const STORE = "cars";
 const META = "meta";
 
@@ -12,8 +12,10 @@ function openDb(): Promise<IDBDatabase> {
     req.onsuccess = () => resolve(req.result);
     req.onupgradeneeded = () => {
       const db = req.result;
-      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: "id" });
-      if (!db.objectStoreNames.contains(META)) db.createObjectStore(META);
+      if (db.objectStoreNames.contains(STORE)) db.deleteObjectStore(STORE);
+      if (db.objectStoreNames.contains(META)) db.deleteObjectStore(META);
+      db.createObjectStore(STORE, { keyPath: "id" });
+      db.createObjectStore(META);
     };
   });
 }
@@ -56,11 +58,6 @@ export async function clearSavedCars() {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
-  try {
-    await caches.delete("araba-fotolar");
-  } catch {
-    /* ignore */
-  }
 }
 
 const photoJobs = new Set<string>();
