@@ -33,15 +33,15 @@ function expandRow(row: CompactRow): CarChallenge {
   };
 }
 
-async function fetchJson(url: string): Promise<unknown> {
+async function fetchJson(url: string): Promise<unknown | null> {
   const res = await fetch(url, { cache: "force-cache" });
-  if (!res.ok) throw new Error(url);
+  if (!res.ok) return null;
   return res.json();
 }
 
 async function fetchPack(): Promise<CarChallenge[]> {
-  const meta = (await fetchJson("/catalog/pack/index.json")) as { parts?: string[] };
-  const parts = meta.parts ?? [];
+  const meta = (await fetchJson("/catalog/pack/index.json")) as { parts?: string[] } | null;
+  const parts = meta?.parts ?? [];
   if (!parts.length) return [];
   const bags: CarChallenge[][] = [];
   const conc = 10;
