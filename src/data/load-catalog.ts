@@ -2,7 +2,7 @@ import { applyYearEstimates } from "@/data/year-utils";
 import type { CarChallenge } from "@/data/cars";
 import { LOCAL_CARS } from "@/data/cars";
 
-export const CATALOG_PARTS = 24;
+type CompactRow = [string, string, string, string, string, number];
 
 function merge(base: CarChallenge[], extra: CarChallenge[]) {
   const seen = new Set(base.map((c) => c.id));
@@ -15,83 +15,61 @@ function merge(base: CarChallenge[], extra: CarChallenge[]) {
   return out;
 }
 
+function expandRow(row: CompactRow): CarChallenge {
+  const [id, brand, model, year, file, guess] = row;
+  const image = file.startsWith("http")
+    ? file
+    : `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(file)}?width=1400`;
+  return {
+    id,
+    brand,
+    model,
+    year,
+    aliases: [`${brand} ${model}`.toLowerCase(), model.toLowerCase()],
+    image,
+    focusX: 50,
+    focusY: 42,
+    ...(guess ? { yearGuess: true } : {}),
+  };
+}
+
 async function fetchJson(url: string): Promise<unknown> {
   const res = await fetch(url, { cache: "force-cache" });
   if (!res.ok) throw new Error(url);
   return res.json();
 }
 
-async function fetchPart(id: string): Promise<CarChallenge[]> {
-  const urls = [`/catalog/p${id}.json`, `/api/catalog/p/${id}`];
-  for (const url of urls) {
-    try {
-      const data = await fetchJson(url);
-      if (Array.isArray(data) && data.length) return data as CarChallenge[];
-    } catch {
-      /* dene diğer adres */
-    }
+async function fetchPack(): Promise<CarChallenge[]> {
+  const meta = (await fetchJson("/catalog/pack/index.json")) as { parts?: string[] };
+  const parts = meta.parts ?? [];
+  if (!parts.length) return [];
+  const bags: CarChallenge[][] = [];
+  const conc = 10;
+  for (let i = 0; i < parts.length; i += conc) {
+    const slice = parts.slice(i, i + conc);
+    const raw = await Promise.all(
+      slice.map(async (name) => {
+        const data = await fetchJson(`/catalog/pack/${name}`);
+        return Array.isArray(data) ? (data as CompactRow[]).map(expandRow) : [];
+      }),
+    );
+    bags.push(...raw);
   }
-  return [];
-}
-
-async function listPartIds(): Promise<string[]> {
-  try {
-    const data = (await fetchJson("/catalog/index.json")) as { parts?: string[] };
-    if (data.parts?.length) return data.parts;
-  } catch {
-    /* api */
-  }
-  try {
-    const data = (await fetchJson("/api/catalog/parts")) as { parts?: string[] };
-    if (data.parts?.length) return data.parts;
-  } catch {
-    /* fallback */
-  }
-  return Array.from({ length: CATALOG_PARTS }, (_, i) => String(i).padStart(2, "0"));
-}
-
-async function fetchPartsParallel(
-  partIds: string[],
-  onBatch: (cars: CarChallenge[], done: number, total: number) => void,
-) {
-  const all: CarChallenge[] = [];
-  const conc = 8;
-  for (let i = 0; i < partIds.length; i += conc) {
-    const slice = partIds.slice(i, i + conc);
-    const bags = await Promise.all(slice.map((id) => fetchPart(id)));
-    for (const bag of bags) all.push(...bag);
-    onBatch(all, Math.min(i + conc, partIds.length), partIds.length);
-  }
-  return all;
+  return bags.flat();
 }
 
 export async function hydrateCatalog(onUpdate: (cars: CarChallenge[], status: string) => void) {
-  let pool = merge([], LOCAL_CARS);
-  onUpdate(pool, "Araba listesi indiriliyor…");
-
+  onUpdate(LOCAL_CARS, "Araba listesi indiriliyor…");
   let remote: CarChallenge[] = [];
   try {
-    const data = await fetchJson("/catalog/all.json");
-    if (Array.isArray(data) && data.length > 100) remote = data as CarChallenge[];
+    remote = await fetchPack();
   } catch {
-    /* paket paket */
+    remote = [];
   }
-
-  if (!remote.length) {
-    const partIds = await listPartIds();
-    remote = await fetchPartsParallel(partIds, (cars, done, total) => {
-      const live = merge(pool, cars);
-      onUpdate(live, `${live.length.toLocaleString("tr-TR")} araba (${done}/${total} paket)`);
-    });
-  }
-
-  if (remote.length) {
-    pool = applyYearEstimates(merge(pool, remote));
-  }
-
+  const pool = applyYearEstimates(merge(LOCAL_CARS, remote));
   onUpdate(pool, `${pool.length.toLocaleString("tr-TR")} araba yüklü`);
-  if (!remote.length && pool.length <= LOCAL_CARS.length) {
-    throw new Error("catalog fetch failed");
+  if (remote.length < 500) {
+    throw new Error("catalog incomplete");
   }
   return pool;
 }
