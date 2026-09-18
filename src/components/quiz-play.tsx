@@ -13,6 +13,7 @@ export function PlayScreen({
   scale,
   difficulty,
   yearRangeId,
+  daily,
   index,
   deckLen,
   total,
@@ -26,16 +27,19 @@ export function PlayScreen({
   guess,
   setGuess,
   onReady,
+  onFail,
   pickName,
   goNext,
   submitText,
   grow,
+  hideCar,
 }: {
   car: CarChallenge;
   crop: { x: number; y: number };
   scale: number;
   difficulty: Difficulty;
   yearRangeId: string;
+  daily: boolean;
   index: number;
   deckLen: number;
   total: number;
@@ -49,20 +53,22 @@ export function PlayScreen({
   guess: string;
   setGuess: (v: string) => void;
   onReady: () => void;
+  onFail: () => void;
   pickName: (option: string) => void;
   goNext: () => void;
   submitText: () => void;
   grow: (reason: string) => void;
+  hideCar: () => void;
 }) {
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 overflow-x-hidden px-4 py-6 sm:py-10">
       <header className="flex items-end justify-between gap-3">
         <div>
           <p className="text-xs tracking-[0.18em] text-amber-300/80 uppercase">
-            {difficulty === "easy" ? "Kolay" : difficulty === "medium" ? "Orta" : "Zor"}
+            {daily ? "Günün turu" : difficulty === "easy" ? "Kolay" : difficulty === "medium" ? "Orta" : "Zor"}
           </p>
           <h1 className="font-heading text-2xl text-white sm:text-3xl">Bu hangi araba?</h1>
-          {difficulty === "medium" ? (
+          {difficulty === "easy" && !daily ? (
             <p className="mt-1 text-xs text-zinc-500">{YEAR_RANGES.find((r) => r.id === yearRangeId)?.label}</p>
           ) : null}
         </div>
@@ -77,7 +83,7 @@ export function PlayScreen({
             className="absolute inset-0 origin-center will-change-transform transition-transform duration-500 ease-out"
             style={{ transform: `scale(${scale})`, transformOrigin: `${crop.x}% ${crop.y}%` }}
           >
-            <CarFront car={car} crop={crop} onReady={onReady} />
+            <CarFront car={car} crop={crop} onReady={onReady} onFail={onFail} />
           </div>
           {!imageReady && (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-zinc-950/90">
@@ -122,9 +128,14 @@ export function PlayScreen({
         </div>
       ) : null}
       {resolved ? (
-        <Button size="lg" className="h-11 w-full" onClick={goNext}>
-          {index + 1 >= deckLen ? "Sonucu gör" : "Devam et"}
-        </Button>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button size="lg" className="h-11 flex-1" onClick={goNext}>
+            {index + 1 >= deckLen ? "Sonucu gör" : "Devam et"}
+          </Button>
+          <Button size="lg" variant="secondary" className="h-11 flex-1" onClick={hideCar}>
+            Bunu bir daha gösterme
+          </Button>
+        </div>
       ) : difficulty === "hard" ? (
         <form
           className="flex flex-col gap-3 sm:flex-row"
@@ -146,13 +157,26 @@ export function PlayScreen({
             <Button type="submit" size="lg" className="h-11 flex-1 sm:flex-none" disabled={resolved || !imageReady}>
               Tahmin et
             </Button>
-            <Button type="button" size="lg" variant="secondary" className="h-11 flex-1 sm:flex-none" disabled={resolved || !imageReady} onClick={() => grow("Bilmiyorum. Resim bir tık büyüdü.")}>
+            <Button
+              type="button"
+              size="lg"
+              variant="secondary"
+              className="h-11 flex-1 sm:flex-none"
+              disabled={resolved || !imageReady}
+              onClick={() => grow("Bilmiyorum. Resim bir tık büyüdü.")}
+            >
               Bilmiyorum
             </Button>
           </div>
         </form>
       ) : (
-        <Button type="button" variant="secondary" className="h-11 w-full sm:w-auto" disabled={resolved || !imageReady} onClick={() => grow("Bilmiyorum. Resim bir tık büyüdü.")}>
+        <Button
+          type="button"
+          variant="secondary"
+          className="h-11 w-full sm:w-auto"
+          disabled={resolved || !imageReady}
+          onClick={() => grow("Bilmiyorum. Resim bir tık büyüdü.")}
+        >
           Bilmiyorum
         </Button>
       )}
