@@ -109,18 +109,7 @@ function toCar(row: Binding): CarChallenge | null {
   return makeCar(`wd-${qid}`, brand, model, parsed, image, false);
 }
 
-async function fetchWikidataCars(): Promise<CarChallenge[]> {
-  const rows = await sparql(`SELECT DISTINCT ?item ?itemLabel ?image ?manufacturerLabel ?year WHERE {
-  ?item wdt:P31 wd:Q3231690 .
-  ?item wdt:P18 ?image .
-  OPTIONAL { ?item wdt:P176 ?manufacturer . }
-  OPTIONAL { ?item wdt:P571 ?d1 . }
-  OPTIONAL { ?item wdt:P580 ?d2 . }
-  BIND(YEAR(COALESCE(?d1, ?d2)) AS ?yint)
-  BIND(STR(?yint) AS ?year)
-  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
-}
-LIMIT 8000`);
+function collectCars(rows: Binding[]) {
   const seen = new Set<string>();
   const out: CarChallenge[] = [];
   for (const row of rows) {
@@ -132,6 +121,25 @@ LIMIT 8000`);
   return out;
 }
 
+export async function fetchWikidataQuick(): Promise<CarChallenge[]> {
+  const rows = await sparql(`SELECT DISTINCT ?item ?itemLabel ?image ?manufacturerLabel ?year WHERE {
+  ?item wdt:P31 wd:Q3231690 .
+  ?item wdt:P18 ?image .
+  OPTIONAL { ?item wdt:P176 ?manufacturer . }
+  OPTIONAL { ?item wdt:P571 ?d1 . }
+  OPTIONAL { ?item wdt:P580 ?d2 . }
+  BIND(YEAR(COALESCE(?d1, ?d2)) AS ?yint)
+  BIND(STR(?yint) AS ?year)
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+}
+LIMIT 5000`);
+  return collectCars(rows);
+}
+
+export async function fetchWikidataCars(): Promise<CarChallenge[]> {
+  return fetchWikidataQuick();
+}
+
 type PetPage = { title: string };
 
 async function petscanFiles(category: string): Promise<string[]> {
@@ -139,7 +147,7 @@ async function petscanFiles(category: string): Promise<string[]> {
     language: "commons",
     project: "wikimedia",
     categories: category,
-    depth: "6",
+    depth: "4",
     format: "json",
     doit: "1",
     negcats: "Side views of automobiles",
@@ -157,7 +165,7 @@ function parseCommonsTitle(fileTitle: string, brands: string[]): CarChallenge | 
   let text = raw.replace(/\.[a-z0-9]+$/i, "").replace(/_/g, " ");
   const year = yearFromLeadingName(text);
   text = text.replace(/\([^)]*\)/g, " ").replace(/\b((?:18|19|20)\d{2})\b/g, " ");
-  const words = text.replace(/[^A-Za-z0-9A-z.+-]+/g, " ").split(" ").filter((w) => w && !JUNK.has(w.toLowerCase()));
+  const words = text.replace(/[^A-Za-z0-9.+-]+/g, " ").split(" ").filter((w) => w && !JUNK.has(w.toLowerCase()));
   const cleaned = words.join(" ");
   if (cleaned.length < 4) return null;
   const lower = cleaned.toLowerCase();
@@ -169,7 +177,7 @@ function parseCommonsTitle(fileTitle: string, brands: string[]): CarChallenge | 
   return makeCar(`cm-${raw.slice(0, 90)}`, brand, model, year, commonsFileUrl(raw), year != null);
 }
 
-async function fetchCommonsView(root: string, brands: string[]) {
+export async function fetchCommonsView(root: string, brands: string[]) {
   const titles = await petscanFiles(root);
   const seen = new Set<string>();
   const out: CarChallenge[] = [];
@@ -182,9 +190,13 @@ async function fetchCommonsView(root: string, brands: string[]) {
   return out;
 }
 
+export function brandList(extra: CarChallenge[] = []) {
+  return [...new Set([...EXTRA_BRANDS, ...extra.map((c) => c.brand)])].sort((a, b) => b.length - a.length);
+}
+
 export async function buildCatalog(): Promise<CarChallenge[]> {
   const wd = await fetchWikidataCars();
-  const brands = [...new Set([...EXTRA_BRANDS, ...wd.map((c) => c.brand)])].sort((a, b) => b.length - a.length);
+  const brands = brandList(wd);
   const [rear, front] = await Promise.all([
     fetchCommonsView("Rear views of automobiles", brands),
     fetchCommonsView("Front views of automobiles", brands),
