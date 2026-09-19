@@ -2,7 +2,7 @@
 
 Küçük kareden marka ve model tahmin oyunu. Ön ve arka fotoğraflar; yan görünüm yok. Bilemeyince kare büyür.
 
-Liste tarayıcıya yazılmaz. Her açılışta katalog sunucudan gelir.
+Katalog (~6.400 araba) derleme anında uygulamaya gömülür. Wikimedia veya canlı API gerekmez.
 
 ## Oynanış
 
